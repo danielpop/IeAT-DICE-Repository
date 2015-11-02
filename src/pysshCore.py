@@ -21,7 +21,7 @@ import os.path
 import os
 import nmap
 import sys, getopt
-
+from flask import Flask, jsonify, Response
 
 
 #fix for UNicodeDecoder Error -> ascii codec
@@ -69,12 +69,14 @@ def installCollectd(hostlist,userName,uPassword,confDir=confDir):
 		listOutput(output)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured Installing collectd!"
+		raise
 	
 	try:	
 		print "Copying collectd conf files ....."
 		client.copy_file(localCopy,"collectd.conf")
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured copying collectd.conf!"
+		raise
 		#client.pool.join()
 
 	
@@ -85,15 +87,19 @@ def installCollectd(hostlist,userName,uPassword,confDir=confDir):
 		client.run_command('nohup service collectd stop', sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured stopping collectd service!"
+		raise
+
 	try:
 		client.run_command('mv /etc/collectd/collectd.conf /etc/collectd/collectd.default', sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured renaming collectd.conf!"
+		raise
 	
 	try:		
 		client.run_command('mv collectd.conf /etc/collectd/collectd.conf', sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured moving new collectd.conf to /etc!"	
+		raise
 		#client.pool.join()
 		#print 'collectd -C ' +localCopy
 
@@ -101,7 +107,8 @@ def installCollectd(hostlist,userName,uPassword,confDir=confDir):
 		print "Adding Comment to File..."
 		client.run_command('echo >> /etc/collectd/collectd.conf')
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "An exception has occured while editing collectd.conf!"	
+		print "An exception has occured while editing collectd.conf!"
+		raise	
 			
 	print "Starting Collectd ..."
 	try:
@@ -110,11 +117,42 @@ def installCollectd(hostlist,userName,uPassword,confDir=confDir):
 		listOutput(out)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured starting collectd!"
+		raise
 		#client.run_command('service collectd start', sudo=True)
-
-	
 	del client
-	print "Done Collectd"	
+	print "Done Collectd"
+
+def installJmxtrans(hostlist,userName,uPassword,confDir,confName):
+	'''
+	Installs and configures jmxtrans for both storm and spark 
+	JVM metrics collection.
+
+	confName -> name of the configuration to be uploaded
+	'''
+	if not os.path.isdir(confDir):
+		print >> sys.stderr, "Configuration dir not found!"
+	
+	print "Installing jmxtrans ..."	
+	localCopyConf = os.path.join(confDir,confName)
+	client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
+	try:
+		client.run_command('wget http://jmxtrans.googlecode.com/files/jmxtrans_250-1_all.deb')
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		print "An exception has occured while downloading jmxtrans!"
+		raise
+
+	try:
+		install = client.run_comand('dpkg -i jmxtrans_250-1_all.deb', sudo=True)
+		listOutput(install)
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		print "An exception has occured while installing jmxtrans!"
+		raise
+
+
+
+
+
+	#http://jmxtrans.googlecode.com/files/jmxtrans_250-1_all.deb
 	
 def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 	'''
@@ -142,7 +180,8 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 		print "Creating folders..."
 		client.run_command('mkdir /opt/certs', sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "An exception has occured creating /opt/certs!"	
+		print "An exception has occured creating /opt/certs!"
+		raise	
 	
 	print "Copying certificate..."
 	
@@ -150,10 +189,13 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 		client.copy_file(localCopyCrt,"logstash-forwarder.crt")
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while moving cert!"
+		raise
+
 	try:	
 		client.run_command('mv logstash-forwarder.crt /opt/certs',sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while moving cert to /opt/certs"
+		raise
 
 	print "Adding Logstash forwarder to apt ..."
 		#output = client.run_command('echo \'deb http://packages.elasticsearch.org/logstashforwarder/debian stable main\' | sudo tee /etc/apt/sources.list.d/logstashforwarder.list',sudo=True)
@@ -162,23 +204,27 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 		client.copy_file(localLFList,"logstashforwarder.list")
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while uploading lfs list!"
+		raise
 
 	try:
 		client.run_command('mv logstashforwarder.list /etc/apt/sources.list.d/logstashforwarder.list',sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while adding lsf list to sourcelist!"
+		raise
 
 	try:	
 		output = client.run_command('wget http://packages.elasticsearch.org/GPG-KEY-elasticsearch')
 		listOutput(output)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while downloading ES GPG Key!"
+		raise
 
 	try:	
 		output1 = client.run_command('apt-key add GPG-KEY-elasticsearch', sudo=True)
 		listOutput(output1)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while adding GPG-Key to apt!"
+		raise
 
 		#output2= client.run_command('wget -O - http://packages.elasticsearch.org/GPG-KEY-elasticsearch | sudo apt-key add -',sudo=True)
 	print "Installing Logstash-forwarder..."
@@ -188,12 +234,14 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 		listOutput(update)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while apt-get update!"
+		raise
 	
 	try:	
 		install =client.run_command('apt-get install -y logstash-forwarder',sudo=True)
 		listOutput(install)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while installing LFS!"
+		raise
 			
 	print "Copying Logstash-forwarder configuration to hosts..."
 
@@ -202,13 +250,15 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 		client.run_command('mv logstash-forwarder.conf /etc/logstash-forwarder.conf',sudo=True)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while uploading lsf conf!"
+		raise
 
 	print "Starting logstash-forwarder ...."
 	try:
 		run = client.run_command('nohup service logstash-forwarder restart', sudo=True)
 		listOutput(run)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "An exception has occured starting LSF"	
+		print "An exception has occured starting LSF"
+		raise	
 		
 
 
@@ -227,6 +277,17 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 # 	print "Stff"
 
 def uploadFile(hostlist,userName,password,fileLoc,fileName, upLoc):
+	'''
+		Uploads a specified file to target servers via ssh.
+
+		hostlist -> list of hosts to connect to 
+		userName -> username for the hosts
+		password -> password of the hosts
+		fileLoc  -> absolute path to the file that needs to be updated
+		fileName -> name of the file to be uploaded
+		upLoc    -> absolute path where the file needs to be saved in the target host
+
+	'''
 	client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
 	cmdMove = 'mv '+fileName+' '+upLoc
 	try:	
@@ -238,6 +299,7 @@ def uploadFile(hostlist,userName,password,fileLoc,fileName, upLoc):
 		client.run_command('echo >> '+upLoc,sudo=True) #TODO replace ugly fix
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while moving file"
+		raise
 
 def serviceCtrl(hostlist,userName,uPassword,serviceName, command):
 	'''
@@ -248,12 +310,13 @@ def serviceCtrl(hostlist,userName,uPassword,serviceName, command):
 		- return hosts on which services are not running
 
 	'''
-	client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
-	cmdStr = 'nohup service ' + serviceName +' ' + command
+	
 	if command not in ['status','stop','start','force-start']:
 		print "Command "+ command +" unsupported!"
 		exit()
 	try:
+		client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
+		cmdStr = 'nohup service ' + serviceName +' ' + command
 		output = client.run_command(cmdStr, sudo=True)
 		for host in output:
 			for line in output[host]['stdout']:
@@ -272,6 +335,10 @@ def serviceCtrl(hostlist,userName,uPassword,serviceName, command):
 					print "Unknown output!"
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured!"
+		raise
+		#response = jsonify({'Status':'Error stopping LSF on '+ nodeFQDN +'!'})
+        #response.status_code = 500
+        #return response
 	
 
 def hostsScan(hostlist):
@@ -369,6 +436,7 @@ def detectOS(hostlist, userName, uPassword):
 					hostOS.update({host:'Unknown'})
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured!"
+		raise
 	return hostOS
 
 
@@ -389,21 +457,88 @@ def startOryx2():
 	oryx2Deployment = {speedLayer:"",batchLayer:"",servingLayer:""}
 	print "Oryx2 Start"
 
-def tests(hostlist):
-	client = ParallelSSHClient(hostlist, user='ubuntu',password='rexmundi220')
-	#create path to file
-	localCopyConf = os.path.join(confDir,'logstash-forwarder.conf')
-	#copy to home dire after connection
-	try:
-		output = client.copy_file(localCopyConf,"logstash-forwarder.conf")
-		client.run_command('rm -rf /etc/logstash-forwarder.conf', sudo=True)
-		client.run_command('mv logstash-forwarder.conf /etc/logstash-forwarder.conf')
-		output = client.run_command('service logstash-forwarder restart', sudo=True)
-		listOutput(output)
-		#used to block and wait for all parallel commands to finish
-		#client.pool.join()
-	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "Stff"
+
+
+def auxCtrl(auxComp,command):
+	'''
+	Function used to start and stop all auxiliary components.
+
+	Parameters:
+	----------
+
+	auxComp -> A string that represents the name of the auxiliary component.
+			   Can be collectd and lsf.
+    command -> Command to be executed on the auxiliary components.
+    		   Can be start or stop
+	'''
+	auxList = ['collectd','lsf']
+	cState = ''
+	if auxComp not in auxList:
+		response = jsonify({'Status':'No such such aux component '+ auxComp})
+		response.status_code = 400
+		return response
+
+	if command == 'start':
+		cState = 'Stopped'
+	elif command == 'stop':
+		cState = 'Running'
+	else:
+		print "Unknown command! Only Start and Stop is supported"
+
+	if auxComp == "collectd":
+		qNCollectd = dbNodes.query.filter_by(nCollectdState = cState).all()
+		if qNCollectd is None:
+			response = jsonify({'Status':'No nodes in state '+cState+' !'})
+			response.status_code = 404
+			return response
+
+		nodeCollectdStopped = []
+		for i in qNCollectd:
+			node = []
+			node.append(i.nodeIP)
+			try:
+				serviceCtrl(node,i.nUser,i.nPass,'collectd', command)
+			except Exception as inst:
+				print >> sys.stderr, type(inst)
+				print >> sys.stderr, inst.args
+				response = jsonify({'Status':'Error exec '+command+' on collectd. Node '+ i.nodeFQDN +'!'})
+				response.status_code = 500
+				return response
+			CollectdNodes = {}
+			CollectdNodes['Node'] = i.nodeFQDN
+			CollectdNodes['IP'] = i.nodeIP
+			nodeCollectdStopped.append(CollectdNodes)
+			response = jsonify({'Status':'Collectd '+command+' successfull','Nodes':nodeCollectdStopped})
+			response.status_code = 200
+			return response
+
+	if auxComp == "lsf":
+		qNLsf = dbNodes.query.filter_by(nLogstashForwState = cState).all()
+		if qNLsf is None:
+			response = jsonify({'Status':'No nodes in state '+cState+'!'})
+			response.status_code = 404
+			return response
+
+		nodeLsfStopped = []
+		for i in qNLsf:
+			node = []
+			node.append(i.nodeIP)
+			try:
+				serviceCtrl(node,i.nUser,i.nPass,'logstash-forwarder', command)
+			except Exception as inst:
+				print >> sys.stderr, type(inst)
+				print >> sys.stderr, inst.args
+				response = jsonify({'Status':'Error exec '+command+' on LSF. Node '+ i.nodeFQDN +'!'})
+				response.status_code = 500
+				return response
+
+			LsfNodes = {}
+			LsfNodes['Node'] = i.nodeFQDN
+			LsfNodes['IP'] = i.nodeIP
+			nodeLsfStopped.append(LsfNodes)
+			response = jsonify({'Status':'LSF '+command+' sucessfull','Nodes':nodeLsfdStopped})
+			response.status_code = 200
+			return response
 
 def main(argv):
 	'''

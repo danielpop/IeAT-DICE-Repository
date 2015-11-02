@@ -23,6 +23,7 @@ import csv
 import unicodedata
 import os
 import sys, getopt
+#from addict import Dict
 
 
 #ouptu dir location
@@ -38,13 +39,15 @@ es = Elasticsearch()
 #     self.
 
 
-def queryConstructor(tstart, tstop, queryString, size=500,ordering="desc"):
+def queryConstructor(tstart, queryString,tstop = 'None',  size=500,ordering="desc"):
   '''
       Function generates a query string reprezented by a dictionary/json.
       It has the following arguments:
 
       tstart      -> unix time representation of required period start
+                  -> can use type "now-10s" definition 
       tstop       -> unix time representation of required period stop
+                  -> be default it is set to None and will be ommited
       queryString -> represents the query from the user
       size        -> repreents how many records should be in the output
                   -> default is 500
@@ -52,10 +55,12 @@ def queryConstructor(tstart, tstop, queryString, size=500,ordering="desc"):
                   -> default is "desc"
 
       Function returns a dictionary of the query body required for elasticsearch.
-
-      TODO:
-      - Need more elegant solution, constructor for queryString
   '''
+  if tstop == 'None':
+    nestedBody = {'gte':tstart}
+  else:
+    nestedBody = {'gte':tstart,'lte':tstop}
+
   queryBody= {
   "size": size,
   "sort": {
@@ -74,10 +79,7 @@ def queryConstructor(tstart, tstop, queryString, size=500,ordering="desc"):
           "must": [
             {
               "range": {
-                "@timestamp": {
-                  "gte": tstart,
-                  "lte": tstop
-                }
+                "@timestamp": nestedBody
               }
             }
           ],
@@ -215,7 +217,7 @@ def defineESCore(IP):
   return es
 if __name__=='__main__':
   #ElasticSearch object that defines the endpoint
-  es = Elasticsearch('109.231.126.38')
+  es = Elasticsearch('194.102.63.78')
   if len(sys.argv) == 1: # only for development
     testQuery = queryConstructor(1438939155342,1438940055342,"hostname:\"dice.cdh5.s4.internal\" AND serviceType:\"dfs\"")
     metrics = ['type','@timestamp','host','job_id','hostname','RamDiskBlocksDeletedBeforeLazyPersisted']
