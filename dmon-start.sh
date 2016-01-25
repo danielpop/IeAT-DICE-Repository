@@ -1,9 +1,10 @@
 #!/bin/bash
-
 ARCH=`uname -s`
 DIR=
 RE='^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$'
 RENR='^[0-9]+$'
+export ES_HEAP_SIZE=4g
+export LS_HEAP_SIZE=1024m
 
 if [ $ARCH == "Linux" ]; then
    DIR=`readlink -f "$( dirname "$0" )"`
@@ -20,5 +21,5 @@ if [ $# -eq 0 ]; then
         python $DIR/src/start.py
 else
    #. $DIR/dmonEnv/bin/activate
-	python $DIR/src/start.py $1 $2 $3 > dmon.log 2>&1 &
+	python $DIR/src/start.py $1 $2 $3 > src/logs/dmon.log 2>&1 &
 fi

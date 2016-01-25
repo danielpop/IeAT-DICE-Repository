@@ -21,7 +21,26 @@ It is designed for:
 * v0.1.1 - First alpha release
 * v0.1.2 - Minor alpha release
 	* added support for Spark monitoring
-	* modified logstash conf generation to include graphite input 	 	
+	* modified logstash conf generation to include graphite input 
+* v0.1.3 - Minor alpha release
+	* added jmxtrans install to pysshCore
+	* added the capability to define node roles
+	* added the capability to start/stop all auxiliary components
+	* added the capability to start/stop auxiliary components on specified nodes
+	* updated kibana version from 4.0.2 to 4.1.2
+	* enabled import export of kibana dashboard
+	* added resources to controll kibana instance
+	* created pid file directory for core components
+	* created log file directory for core components
+	* created dmon-stop script
+	* enhanced queryConstructor function to enable elasticsearch date math
+	* updated all Vagrant files
+* v0.1.4 - Minor alpha release
+	* added log export resource
+	* added parallel processing of some requests (marked with _../v2/.._)
+	* added new dmon-agent for controlling auxiliary monitoring components
+	* added dmon-wui template to respoitory 	 	
+	  		 	
 
 ##Installation
 
@@ -116,10 +135,27 @@ The Overlord is structured into two components:
 -
 #### Monitoring Core
 
+`GET` `/v1/log`
+
+Return the log of dmon. It contains information about the last requests and the IPs from which they originated as well as status information of variouse sub components.
+
 `GET` `/v1/overlord`
 
 Returns information regarding the current version of the Monitoring Platform.
 
+`GET` `/v1/overlord/framework`
+
+Returns the currently supported frameworks.
+
+```json
+{
+	Supported Frameworks:[<list_of_frameoworks>]
+}
+```
+
+`GET` `/v1/overlord/framework/{fwork}`
+
+Returns the metrics configuration file for big data technologies. The response will have the file mime-type encoded. For HDFS,Yarn and Spark it is set to __'text/x-java-properties'__ while for Storm it is __'text/yaml'__.
 
 `PUT` `/v1/overlord/application/{appID}`
 
@@ -135,6 +171,13 @@ Deploys all monitoring core components provided they have values preset hosts. I
 **NOTE**: Currently the '-l' flag of the start script _dmon-start.sh_ does the same as the later option.
 
 
+`GET` `/v1/overlord/core/database`
+
+Return the current internal state of Dmon in the form of an sqlite2 database. The response has _application/x-sqlite3_ mimetype.
+
+`PUT` `/v1/overlord/core/database`
+
+Can submit a new version of the internal database to dmon. It will replace the current states with new states. The old states are backed up before applying the new ones. Database should take the form of sqlite3 database file and sent unsing the _application/x-sqlite3_ mimetype.
 
 
 `GET` `/v1/overlord/core/status`
@@ -243,6 +286,74 @@ Bootstrap of all non monitored nodes. Installs, configures and start collectd an
 **NOTE**: Duplicate from _../aux/.._ branch!
 ***
 
+`GET` `/v1/overlord/nodes/roles`
+
+Returns the roles currently held by each computational node.
+
+```json
+{
+  "Nodes": [
+    {
+      "dice.cdh5.mng.internal": [
+        "storm",
+        "spark"
+      ]
+    },
+    {
+      "dice.cdh5.w1.internal": [
+        "unknown"
+      ]
+    },
+    {
+      "dice.cdh5.w2.internal": [
+        "yarn",
+        "spark",
+        "storm"
+      ]
+    },
+    {
+      "dice.cdh5.w3.internal": [
+        "unknown"
+      ]
+    }
+  ]
+}
+```
+
+If the node has an unknown service installed, or the roles are not specified the type is set to __unknown__.
+
+
+`PUT` `/v1/overlord/nodes/roles`
+
+Modifies the roles of each nodes.
+
+**TODO:** json structure.
+
+**FUTURE WORK:** This feature will be developed for future versions.
+
+
+`POST` `/v1/overlord/nodes/roles`
+
+Generates metrics configuration files for each role assigned to a node and uploads it to the required directory. It returns a list of all nodes to which a configuration of a certain type (i.e. yarn, spark, storm etc) has been uploaded.
+
+```json
+{
+	'Status':{
+		'yarn':[list_of_yarn_nodes],
+		'spark':[list_of_spark_nodes],
+		'storm':[list_of_storm_nodes],
+		'unknown':[list_of_unknown_nodes]
+		}
+}
+```
+
+
+
+**NOTE:** The directory structure is based on the Vanilla and Cloudera distribution of HDFS, Yarn and Spark. Custom installtions are not yet supported.
+As __yarn__ and __HDFS__ have the same metrics system their tags (i.e. hdfs and yarn) are interchangable in the context of D-Mon.
+
+
+
 `GET` `/v1/overlord/nodes/{nodeFQDN}`
 
 Returns information of a particular monitored node identified by _nodeFQDN_.
@@ -311,9 +422,16 @@ Input:
 
 ```json
 {
-	"Roles":"[listofroles]"
+	"Roles":"[list_of_roles]"
 }
 ```
+
+
+`POST` `/v1/overlord/nodes/{nodeFQDN}/roles`
+
+Redeploys metrics configuration for a specific node based on the roles assigned to it.
+
+**FUTURE WORK:** This feature will be developed for future versions.
 
 ***
 `DELETE` `/v1/overlord/nodes/{nodeFQDN}/purge`
@@ -343,7 +461,8 @@ Return a list of current hosts  comprising the ES cluster core components. The f
 }
 
 ```
-***
+
+
 `POST` `/v1/overlord/core/es` 
 
 Generates and applies the new configuration options of the ES Core components. During this request the new configuration will be generated.
@@ -530,20 +649,56 @@ Uploads a private key with the name given by _keyName_ and associates it with th
 
 ***
 
+`GET` `/v1/overlord/core/kb`
+
+Returns information for all kibana instances.
+
+```json
+{
+	KB Instances:[{
+		"HostFQDN":<FQDN>,
+		"IP":<host_ip>,
+		"OS":<os_type>,
+		"KBPort":<kibana_port>
+		"PID":<kibana_pid>,
+		"KBStatus":<Running|Stopped|Unknown>
+	},
+	......................
+	]
+}
+```
+
+`POST` `/v1/overlord/core/kb`
+
+Generates the configuration file and  Starts or restarts a kibana session.
+
+**NOTE:** Currently supports only one instance. No dostributed deployment.
+
+
 `GET` `/v1/overlord/core/kb/config`
 
-Returns the current configuration file for Kibana.
+Returns the current configuration file for Kibana. Uses the mime-type __'text/yaml'__.
 
-**NOTE:** Marked as obsolete!
 
-***
+
 
 `PUT` `/v1/overlord/core/kb/config`
-
-Input:
 Changes the current configuration for Kibana
 
-**NOTE:** Marked as obsolete!
+Input:
+
+```json
+{
+	"HostFQDN":<FQDN>,
+	"IP":<host_ip>,
+	"OS":<os_type>,
+	"KBPort":<kibana_port>
+}
+```
+
+
+
+***
 
 
 
@@ -558,6 +713,38 @@ Returns basic information about auxiliary components.
 **FUTURE Work**: Information will basically be a kind of Readme.
 
 ***
+
+`GET` `/v1/overlord/aux/agent`
+
+Returns the current deployment status of dmon-agents.
+
+```json
+{
+  "Agents": [
+    {
+      "Agent": false,
+      "NodeFQDN": "dice.cdh5.mng.internal"
+    },
+    {
+      "Agent": false,
+      "NodeFQDN": "dice.cdh5.w1.internal"
+    },
+    {
+      "Agent": false,
+      "NodeFQDN": "dice.cdh5.w2.internal"
+    },
+    {
+      "Agent": false,
+      "NodeFQDN": "dice.cdh5.w3.internal"
+    }
+  ]
+}
+```
+
+`POST` `/v1/overlord/aux/agent`
+
+Bootstraps the installation of dmon-agent services on nodes who are note marked as
+already active. It only works if all nodes have the same authentication.
 
 `GET` `/v1/overlord/aux/deploy`
 
@@ -598,20 +785,63 @@ All nodes can be restarted independent from their current state using the **--re
 
 Deploys either collectd or logstash-forwarder to the specified node. In order to reload the configuration file the **--redeploy** parameter has to be set. If the  current node status is _None_ than the defined component (collectd or lsf) will be installed.
 
+**FUTURE Work**: Currently configurations of both collectd and logstash-forwarder are global and can't be changed on a node by node basis.
+
 ***
 
 `GET` `/v1/overlord/aux/{collectd|logstashfw}/config`
 
 Returns the current collectd or logstashfw configuration file.
 
-***
+
 
 `PUT` `/v1/overlord/aux/{collectd|logstashfw}/config`
 
-Changes the configuration/status of collectd or logstashfw and restarts all aux components.
- 
+Changes the configuration/status of collectd or logstashforwarder and restarts all aux components.
 
-**FUTURE Work**: Currently configurations of both collectd and logstash-forwarder are global and can't be changed on a node by node basis.
+***
+
+`POST` `/v1/overlord/aux/{auxComp}/start` 
+
+Starts the specified auxiliary component on all nodes.
+
+
+`POST` `/v1/overlord/aux/{auxComp}/stop`
+
+Stops the specified auxiliary components on all nodes.
+***
+
+`POST` `/v1/overlord/aux/{auxComp}/{nodeFQDN}/start`
+
+Starts the specified auxiliary component on a specific node.
+
+
+`POST` `/v1/overlord/aux/{auxComp}/{nodeFQDN}/stop`
+
+Stops the specified auxiliary component on a specific node.
+
+
+
+__Note:__ Some resources have been redesigned with parallel processing in mind. These use greenlets (gevent) to parallelize as much as possible the first version of the resources. These paralel resources are marked with _../v2/.._. All other functionality and return functions are the same.
+
+For the sake of brevity these resources will not be detailed. Only additional functionality will be documented.
+
+
+`GET` `/v2/overlord/aux/deploy/check`
+
+
+Polls dmon-agents from the current monitored cluster.
+
+
+```json
+{
+  "Failed": [],
+  "Message": "Nodes updated!",
+  "Status": "Update"
+}
+```
+
+If nodes don't respon they are added to the _Failed_ list togheter with the appropiate HTTP error code.
 
 -
 ### Observer
@@ -708,4 +938,33 @@ Output depends on the option selected by the user: csv, json or plain.
 
 **NOTE**: The filter metrics must be in the form of a list. Also, filtering currently works only for CSV and plain output. Future versions will include the ability to export metrics in the form of RDF+XML in concordance with the OSLC Performance Monitoring 2.0 standard. It is important to note that we will export in this format only system metrics. No Big Data framework specific metrics.
 
+From Version __0.1.3__ it is possible to ommit the _tstop_ parameter, instead it is possible to define a time window based on the current  system time:
 
+```json
+{
+  "DMON":{
+    "query":{
+      "size":"<SIZEinINT>",
+      "ordering":"<asc|desc>",
+      "queryString":"<query>",
+      "tstart":"now-30s"
+    }
+  }
+}
+
+```
+
+where __s__ stands for second or __m__ for minites and __h__ for hours. 
+
+
+#License
+
+__DICE Monitoring Platform__
+
+Copyright (C) 2015 Gabriel Iuhasz, Institute e-Austria Romania
+
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.

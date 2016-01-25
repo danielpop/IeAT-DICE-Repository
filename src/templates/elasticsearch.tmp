@@ -106,9 +106,16 @@ node.name: {{nodeName}}
 #
 #index.number_of_shards: 5
 
+#DICE Config Shards
+
+#index.number_of_shards: 1
+
 # Set the number of replicas (additional copies) of an index (1 by default):
 #
 #index.number_of_replicas: 1
+
+#DICE Config Replicas
+#index.number_of_replicas: 0
 
 # Note, that for development on a local machine, with small indices, it usually
 # makes sense to "disable" the distributed features:
@@ -181,7 +188,7 @@ path.logs: {{esLogDir}}
 #
 # Set this property to true to lock the memory:
 #
-#bootstrap.mlockall: true
+bootstrap.mlockall: true
 
 # Make sure that the ES_MIN_MEM and ES_MAX_MEM environment variables are set
 # to the same value, and that the machine has enough memory to allocate
@@ -209,7 +216,8 @@ path.logs: {{esLogDir}}
 
 # Set both 'bind_host' and 'publish_host':
 #
-#network.host: 192.168.0.1
+#TODO: DICE uncomment for public access
+#network.host: 0.0.0.0
 
 # Set a custom port for the node to node communication (9300 by default):
 #
@@ -291,7 +299,40 @@ path.logs: {{esLogDir}}
 #
 #indices.recovery.concurrent_streams: 5
 
+############################### DICE Parameters ###############################
 
+## Threadpool Settings ##
+
+# Search pool
+#threadpool.search.type: fixed
+#threadpool.search.size: 20
+#threadpool.search.queue_size: 100
+
+# Bulk pool
+#threadpool.bulk.type: fixed
+#threadpool.bulk.size: 60
+#threadpool.bulk.queue_size: 300
+
+# Index pool
+#threadpool.index.type: fixed
+#threadpool.index.size: 20
+#threadpool.index.queue_size: 100
+
+# Indices settings
+#indices.memory.index_buffer_size: 30%
+#indices.memory.min_shard_index_buffer_size: 12mb
+#indices.memory.min_index_buffer_size: 96mb
+
+# Cache Sizes
+#indices.fielddata.cache.size: 20%
+#indices.fielddata.cache.expire: 6h
+#indices.cache.filter.size: 20%
+#indices.cache.filter.expire: 6h
+
+#Dynamic Scripting
+script.engine.groovy.inline.aggs: on
+script.inline: on
+script.indexed: on
 ################################## Discovery ##################################
 
 # Discovery infrastructure ensures nodes can be found within a cluster
@@ -359,22 +400,22 @@ path.logs: {{esLogDir}}
 #index.search.slowlog.threshold.fetch.warn: 1s
 #index.search.slowlog.threshold.fetch.info: 800ms
 #index.search.slowlog.threshold.fetch.debug: 500ms
-#index.search.slowlog.threshold.fetch.trace: 200ms
+index.search.slowlog.threshold.fetch.trace: 200ms
 
 #index.indexing.slowlog.threshold.index.warn: 10s
 #index.indexing.slowlog.threshold.index.info: 5s
 #index.indexing.slowlog.threshold.index.debug: 2s
-#index.indexing.slowlog.threshold.index.trace: 500ms
+index.indexing.slowlog.threshold.index.trace: 500ms
 
 ################################## GC Logging ################################
 
 #monitor.jvm.gc.young.warn: 1000ms
 #monitor.jvm.gc.young.info: 700ms
-#monitor.jvm.gc.young.debug: 400ms
+monitor.jvm.gc.young.debug: 400ms
 
 #monitor.jvm.gc.old.warn: 10s
 #monitor.jvm.gc.old.info: 5s
-#monitor.jvm.gc.old.debug: 2s
+monitor.jvm.gc.old.debug: 2s
 
 ################################## Security ################################
 

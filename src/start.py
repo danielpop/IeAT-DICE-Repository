@@ -73,7 +73,7 @@ def main(argv):
 			else:
 				try:
 					print >>sys.stderr, "Bootstrapping D-Mon Core please wait..."
-					procStart = subprocess.Popen(['./bootstrap.sh'],stdout=subprocess.PIPE, stderr=subprocess.PIPE,shell=False).communicate()
+					procStart = subprocess.Popen(['./bootstrap.sh'], stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=False).communicate()
 					print >>sys.stderr, "Bootstrap finished!"
 				except Exception as inst:
 					print >> sys.stderr, 'Error while executing bootstrap script!'
@@ -84,7 +84,7 @@ def main(argv):
 				lock.write(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 				lock.close()
 				sys.exit(0) #exit when done
-		if opt in ("-p","--port"):
+		if opt in ("-p", "--port"):
 			if isinstance(int(arg),int) is not True:
 				print >> sys.stderr, "Argument must be an integer!"
 				sys.exit(2)
@@ -101,7 +101,7 @@ def main(argv):
 					chkESCoreDB = db.session.query(dbESCore.hostFQDN).all()
 					print >> sys.stderr, chkESCoreDB
 					if chkESCoreDB is not None:
-						corePopES = dbESCore(hostFQDN=socket.getfqdn(),hostIP = '127.0.0.1',hostOS='ubuntu', nodeName = 'esCoreMaster',
+						corePopES = dbESCore(hostFQDN=socket.getfqdn(), hostIP='127.0.0.1', hostOS='ubuntu', nodeName='esCoreMaster',
 							clusterName='diceMonit', conf = 'None', nodePort=9200, MasterNode=1)
 						db.session.add(corePopES)
 						try:
