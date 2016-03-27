@@ -56,6 +56,7 @@ def portScan(addrs,ports):
 	
 	print 'Scanning Complete in: ', total
 
+
 def checkPID(pid):
 	"""
 	Check For the existence of a unix pid.
@@ -69,6 +70,7 @@ def checkPID(pid):
 		return False
 	else:
 		return True
+
 
 def startLocalProcess(command):
 	'''
@@ -93,7 +95,7 @@ def checkUnique(nodeList):
 	sameCredentials = []
 	ipNode = []
 	for d in nodeList:
-		for k,v in d.iteritems():
+		for k, v in d.iteritems():
 			if v in seen:
 				ipNode.append(k)
 				sameCredentials.append(v)
@@ -226,6 +228,8 @@ def dbBackup(db, source, destination, version=1):
 		if os.path.isfile(vdest) is True:
 			return dbBackup(db, source, destination, version + 1)
 		os.rename(source, destination)
+
+
 
 
 # test = AgentResourceConstructor(['192.12.12.12'], '5000')

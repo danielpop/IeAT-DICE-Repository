@@ -5,6 +5,8 @@ import datetime
 import time
 from flask import jsonify
 import subprocess
+from app import *
+
 
 
 class pyLogstashInstance():
@@ -12,6 +14,9 @@ class pyLogstashInstance():
     cfgDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
     lockDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lock')
     pidDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pid')
+    logstashDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logstash')
+    logstashBin = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logstash/bin/')
+    cred = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'credentials')
 
     def generateConfig(self, settingsDict):
         templateLoader = jinja2.FileSystemLoader(searchpath="/")
@@ -22,26 +27,37 @@ class pyLogstashInstance():
             response = jsonify({'Status': 'Template Error',
                 'Message': 'File not found!'})
             response.status_code = 500
+            app.logger.error('[%s] : [ERROR] Template file not found',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
             return response
         confInfo = template.render(settingsDict)
         confFile = open(os.path.join(pyLogstashInstance.cfgDir, 'logstash.conf'), "w+")
         confFile.write(confInfo)
         confFile.close()
 
-    def start(self, heap='512m', worker=1):
+    def start(self, heap='512m', worker=4):
         config = os.path.join(pyLogstashInstance.cfgDir, 'logstash.conf')
         log = os.path.join(pyLogstashInstance.lockDir, 'logstash.log')
         pidFile = os.path.join(pyLogstashInstance.pidDir, 'logstash.pid')
-        pid = pyLogstashInstance.check()
+        pid = pyLogstashInstance.check
         if pid is True:
             subprocess.call(['kill', '-9', str(pid)])
+
+        lsCommand = 'LS_HEAP_SIZE=%s %slogstash agent -f %s -l %s -w %s' %(heap, pyLogstashInstance.logstashBin,
+                                                                           config, log, worker)
+        app.logger.info('[%s] : [INFO] Logstash command string:  %s',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), lsCommand)
+        #print 'LS_HEAP_SIZE=' + heap + ' ' + pyLogstashInstance.logstashBin+'logstash agent -f ' + config + ' -l ' + log +' -w '+str(worker)
         try:
-            lspid = subprocess.Popen('LS_HEAP_SIZE=' + heap + ' /opt/dmon-logstash/logstash/bin/logstash agent -f ' + config + ' -l ' + log +
-                                     ' -w '+worker, shell=True).pid
+            lspid = subprocess.Popen('LS_HEAP_SIZE=' + heap + ' ' + pyLogstashInstance.logstashBin+'logstash agent -f ' + config + ' -l ' + log +
+                                     ' -w '+str(worker), shell=True).pid
         except Exception as inst:
-            print >> sys.stderr, 'Problem Starting LS!'
-            print >> sys.stderr, type(inst)
-            print >> sys.stderr, inst.args
+            #print >> sys.stderr, 'Problem Starting LS!'
+            #print >> sys.stderr, type(inst)
+            #print >> sys.stderr, inst.args
+            app.logger.error('[%s] : [ERROR] Error starting Logstash with:%s args:%s',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst),
+                             inst.args)
             response = jsonify({'Error': 'Starting LS'})
             response.status_code = 500
             return response
@@ -51,16 +67,24 @@ class pyLogstashInstance():
             newPid.write(str(lspid))
             newPid.close()
         except IOError:
-            print >> sys.stderr, 'Problem writing LS pid!'
+            #print >> sys.stderr, 'Problem writing LS pid!'
             response = jsonify({'Error': 'File I/O!'})
             response.status_code = 500
+            app.logger.error('[%s] : [ERROR] Error reading Logstash PID',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
             return response
         return lspid
 
     def stop(self):
-        pid = pyLogstashInstance.check()
+        pid = pyLogstashInstance.check
         if pid is True:
-            subprocess.call(['kill', '-9', str(pid)])
+            try:
+                subprocess.call(['kill', '-9', str(pid)])
+            except Exception as inst:
+                #print >> sys.stderr, 'PID not found!'
+                #print >> sys.stderr, type(inst)
+                #print >> sys.stderr, inst.args
+                 app.logger.warning('[%s] : [WARNING] No Logstash instance found with PID: %s', datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(pid))
             return 1
         else:
             return 0
@@ -68,63 +92,23 @@ class pyLogstashInstance():
     def deploy(self):
         lslock = os.path.join(pyLogstashInstance.lockDir, 'ls.lock')
         if os.path.isfile(lslock) is True:
-            print >> sys.stderr, "Logstash already installed!"
+            app.logger.warning('[%s] : [WARNING] Logstash already installed', datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            #print >> sys.stderr, "Logstash already installed!"
         else:
             try:
-                p = subprocess.Popen('wget https://download.elastic.co/logstash/logstash/logstash-2.2.1.tar.gz', shel=True)
-                p.wait()
+                #p4 = subprocess.Popen('plugin install http_poller', shell=True, cwd='/opt/dmon-logstash/logstash/bin')
+                #p4.wait()
+                ppi = subprocess.Popen(['./bootstrap.sh'], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                       shell=False).communicate()
             except Exception as inst:
-                print >> sys.stderr, "Error fetching logstash!"
-                print >> sys.stderr, type(inst)
-                print >> sys.stderr, inst.args
-
-            basedir = os.path.abspath(os.path.dirname(__file__))
-
-            if not os.path.isfile(os.path.join(basedir), 'logstash-2.2.1.tar.gz'):
-                print >> sys.stderr, 'Logstash tar not found!'
-                response = jsonify({'Status': 'Env Error',
-                                    'Message': 'Logstash tar not found!'})
-                response.status_code = 500
-                return response
-
-            try:
-                p1 = subprocess.Popen('tar xf logstash-2.2.1.tar.gz', shel=True)
-                p1.wait()
-            except Exception as inst:
-                print >> sys.stderr, "Error extracting logstash!"
-                print >> sys.stderr, type(inst)
-                print >> sys.stderr, inst.args
-
-            try:
-                p2 = subprocess.Popen('mv logstash-2.2.1/* logstash', shell=True)
-                p2.wait()
-            except Exception as inst:
-                print >> sys.stderr, "Error moving logstash!"
-                print >> sys.stderr, type(inst)
-                print >> sys.stderr, inst.args
-                response = jsonify({'Status': 'Env Error',
-                                    'Message': 'Error moving logstash'})
-                response.status_code = 500
-                return response
-
-            try:
-                p3 = subprocess.Popen('rm -rf logstash-2.2.1.tar.gz', shell=True)
-                p3.wait()
-            except Exception as inst:
-                print >> sys.stderr, "Error cleaning up logstash install dir!"
-                print >> sys.stderr, type(inst)
-                print >> sys.stderr, inst.args
-
-            try:
-                p4 = subprocess.Popen('/opt/dmon-logstash/logstash/bin/plugin install http_poller', shell=True)
-                p4.wait()
-            except Exception as inst:
-                print >> sys.stderr, "Error while installing http_poller plugin!"
-                print >> sys.stderr, type(inst)
-                print >> sys.stderr, inst.args
+                # print >> sys.stderr, "Error while bootstrapping!"
+                # print >> sys.stderr, type(inst)
+                # print >> sys.stderr, inst.args
+                app.logger.error('[%s] : [ERROR] Logstash Bootstrap failed with:  %s, %s', datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),  type(inst), inst.args)
 
             lock = open(lslock, "w+")
             lock.write(datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            app.logger.info('[%s] : [INFO] Created lock file', datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
             lock.close()
 
     def check(self):
@@ -134,8 +118,9 @@ class pyLogstashInstance():
             pidString = lsPID.strip()
             pid = int(pidString)
         except Exception as inst:
-            print >> sys.stderr, type(inst)
-            print >> sys.stderr, inst.args
+            #print >> sys.stderr, type(inst)
+            #print >> sys.stderr, inst.args
+            app.logger.error('[%s] : [ERROR] Error reading PID file with: %s, %s', datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
             return 0
 
         if not checkPID(pid):
@@ -143,8 +128,36 @@ class pyLogstashInstance():
         else:
             return pid
 
+    def readPid(self):
+        lsPIDfile = os.path.join(pyLogstashInstance.pidDir, 'logstash.pid')
+        try:
+            lsPID = open(lsPIDfile, 'r').readline()
+            pidString = lsPID.strip()
+            pid = int(pidString)
+        except Exception as inst:
+            #print >> sys.stderr, type(inst)
+            #print >> sys.stderr, inst.args
+            app.logger.warning('[%s] : [WARNING] Error reading PID file with: %s, %s',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+            return 'none'
+        return pid
+
     def validate(self):  #TODO: implement
         return "validate configuration"
+
+    def generateCertificate(self, keyName, certName, validity=3650):
+        # openssl req -config /etc/ssl/openssl.cnf -x509 -days 3650 -batch -nodes -newkey rsa:2048 -keyout /opt/IeAT-DICE-Repository/src/keys/logstash-forwarder.key -out /opt/IeAT-DICE-Repository/src/keys/logstash-forwarder.crt
+        fKey = os.path.join(pyLogstashInstance.cred, keyName + '.key')
+        fCert = os.path.join(pyLogstashInstance.cred, certName + '.crt')
+        app.logger.info('[%s] : [INFO] SSL certificate at %s and key at %s',datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), fKey, fCert)
+        cmdStr = "openssl req -config /etc/ssl/openssl.cnf -x509 -days %d -batch -nodes -newkey rsa:2048 -keyout %s -out %s" %(validity, fKey, fCert)
+        try:
+            subprocess.Popen(cmdStr, shell=True).pid
+        except Exception as inst:
+            app.logger.error('[%s] : [ERROR] Can not generate ssl certificate and key with exception: %s, %s',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+            return False
+        return True
 
 
 def checkPID(pid):

@@ -57,9 +57,9 @@ def queryConstructor(tstart, queryString,tstop = 'None',  size=500,ordering="des
       Function returns a dictionary of the query body required for elasticsearch.
   '''
   if tstop == 'None':
-    nestedBody = {'gte':tstart}
+    nestedBody = {'gte': tstart}
   else:
-    nestedBody = {'gte':tstart,'lte':tstop}
+    nestedBody = {'gte': tstart,'lte': tstop}
 
   queryBody= {
   "size": size,
@@ -121,7 +121,7 @@ def queryESCore(queryBody, allm=True, dMetrics=[ ], debug=False, myIndex="logsta
 
   '''
   #these are the metrics listed in the response JSON under "_source"
-  res = es.search(index=myIndex,body=queryBody)
+  res = es.search(index=myIndex, body=queryBody)
   if debug == True:
     print "%---------------------------------------------------------%"
     print "Raw JSON Ouput"
@@ -144,18 +144,18 @@ def queryESCore(queryBody, allm=True, dMetrics=[ ], debug=False, myIndex="logsta
           print "%---------------------------------------------------------%"
         termsList.append(met)
         termValues.append(doc['_source'][met]) 
-      dictValues=dict(zip(termsList,termValues))
+      dictValues=dict(zip(termsList, termValues))
     else:
       for terms in doc['_source']:
       #prints the values of the metrics defined in the metrics list
         if debug == True:
           print "%---------------------------------------------------------%"
           print "Parsed Output -> ES doc id, metrics, metrics values."
-          print("doc id %s) metric %s -> value %s" % (doc['_id'],terms,  doc['_source'][terms]))
+          print("doc id %s) metric %s -> value %s" % (doc['_id'], terms, doc['_source'][terms]))
           print "%---------------------------------------------------------%"
         termsList.append(terms)
         termValues.append(doc['_source'][terms])
-        dictValues=dict(zip(termsList,termValues))
+        dictValues = dict(zip(termsList, termValues))
     ListMetrics.append(dictValues)
   return ListMetrics, res
   
@@ -171,11 +171,18 @@ def dict2CSV(ListValues,fileName="output"):
   '''
   if not ListValues:
         sys.exit("listValues argument is empty. Please supply valid input!")
-  fileType = fileName+".csv"
-  csvOut = os.path.join(outDir,fileType)
+  fileType = fileName + ".csv"
+  csvOut = os.path.join(outDir, fileType)
   try:
-    with open(csvOut,'wb') as csvfile:
-      w=csv.DictWriter(csvfile, ListValues[0].keys())
+    with open(csvOut, 'wb') as csvfile:
+      uniqueColumns = set()
+      for d in ListValues:
+        # print >>sys.stderr, d.keys()
+        for e in d.keys():
+          if e not in uniqueColumns:
+            uniqueColumns.add(e)
+      csvHeaders = list(uniqueColumns)
+      w = csv.DictWriter(csvfile, csvHeaders)
       w.writeheader()
       for dictMetrics in ListValues:
         w.writerow(dictMetrics)
@@ -184,10 +191,9 @@ def dict2CSV(ListValues,fileName="output"):
     print "ops"
 
 
-
 def main(argv):
   try:
-    opts, args=getopt.getopt(argv,"hd")
+    opts, args = getopt.getopt(argv, "hd")
   except getopt.GetoptError:
     print "%-------------------------------------------------------------------------------------------%"
     print "Invalid argument! Arguments must take the form:"
@@ -208,20 +214,19 @@ def main(argv):
         print "%-------------------------------------------------------------------------------------------%"
         sys.exit()
       elif opt in ("-d"):
-        testQuery = queryConstructor(1438939155342,1438940055342,"hostname:\"dice.cdh5.s4.internal\" AND serviceType:\"dfs\"")
-        metrics = ['type','@timestamp','host','job_id','hostname','AvailableVCores']
+        testQuery = queryConstructor(1438939155342, 1438940055342,"hostname:\"dice.cdh5.s4.internal\" AND serviceType:\"dfs\"")
+        metrics = ['type', '@timestamp', 'host', 'job_id', 'hostname', 'AvailableVCores']
         test, test2 = queryESCore(testQuery, debug=True)
         dict2CSV(test)
-def defineESCore(IP):
-  es = Elasticsearch(IP)
-  return es
+
 if __name__=='__main__':
   #ElasticSearch object that defines the endpoint
-  es = Elasticsearch('194.102.63.78')
-  if len(sys.argv) == 1: # only for development
-    testQuery = queryConstructor(1438939155342,1438940055342,"hostname:\"dice.cdh5.s4.internal\" AND serviceType:\"dfs\"")
-    metrics = ['type','@timestamp','host','job_id','hostname','RamDiskBlocksDeletedBeforeLazyPersisted']
-    test, test2 = queryESCore(testQuery,allm=False,dMetrics= metrics,debug=False)
+  es = Elasticsearch('85.120.206.43')
+  if len(sys.argv) == 1:  # only for development
+    testQuery = queryConstructor(1438939155342, 1438940055342, "hostname:\"dice.chd5.mng.internal\" AND serviceType:\"dfs\"")
+    print testQuery
+    #metrics = ['type','@timestamp','host','job_id','hostname','RamDiskBlocksDeletedBeforeLazyPersisted']
+    test, test2 = queryESCore(testQuery, allm=True, debug=True)
     dict2CSV(test)
     print test2
     #queryESCoreCSV(test, True)
