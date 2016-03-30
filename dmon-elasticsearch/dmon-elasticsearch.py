@@ -27,6 +27,15 @@ import jinja2
 import sys
 import subprocess
 import platform
+import json
+import logging
+from logging.handlers import RotatingFileHandler
+import datetime
+import time
+
+
+from app import *
+from pyESAgentController import *
 
 #directory location
 
@@ -34,26 +43,85 @@ tmpDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 pidDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pid')
 logDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
 cfgDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'config')
+pldDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'payload')
+esDir = '/opt/elasticsearch'
 
-app = Flask("dmon-elasticsearch")
-api = Api(app, version='0.0.1', title='DICE Monitoring Elasticsearch API',
-          description="RESTful API for the DICE Monitoring Platform  Elasticsearch agent (dmon-elasticsearch)",
-          )
+schema = 'dummy'
 
-# changes the descriptor on the Swagger WUI and appends to api /dmon and then /v1
-agent = api.namespace('agent', description='dmon elasticsearch operations')
+esController = ESAgentController(configLoc=cfgDir, tempLoc=tmpDir,
+                                 esLoc=esDir, pidLoc=pidDir, logLoc=logDir, schema=schema)
 
 
-@agent.route('/v1/log')
-class NodeLog(Resource):
+esCacheModel = api.model('ES Cache Model', {
+    'fieldDataCacheSize': fields.String(required=False, default="20%", description='Cache Size for field data'),
+    'fieldDataCacheExpires': fields.String(required=False, default="6h", description='Field data expiration time'),
+    'cacheFilterSize': fields.String(required=False, default="20%", description='Cache filter size'),
+    'cacheFilterExpires': fields.String(required=False, default="6h", description='Cache filter expiration time')
+})
+
+esIndexSettingModel = api.model('ES Index Model', {
+    'bufferSize': fields.String(required=False, default="30%", description='Index Buffer Size'),
+    'minShardBufferSize': fields.String(required=False, default="12mb", description='Min Shard Index  Buffer Size'),
+    'minIndexBufferSize': fields.String(required=False, default="96mb", description='Min Index Buffer Size')
+})
+
+esConfModel = api.model('ES Conf Model', {
+    'clusterName': fields.String(required=True, default="diceMonit", description='The name given to the ES cluster'),
+    'nodeID': fields.String(required=True, default="esMaster", description='The name given to the ES node'),
+    'nodeMaster': fields.String(required=True, default="True", description='Set node as Master'),
+    'nodeData': fields.String(required=True, default="True", description='Allow node to store data'),
+    'shards': fields.Integer(required=True, default=5, description='Number of shards'),
+    'replicas': fields.Integer(required=True, default=1, description='Number of replicas'),
+    'networkHost': fields.String(required=True, default="0.0.0.0", description='Network host IP'),
+    'cacheSettings': fields.Nested(esCacheModel, description="Cache settings"),
+    'indexSettings': fields.Nested(esIndexSettingModel, description="Index settings")
+})
+
+
+@agent.route('/v1/logs')
+class NodeLogs(Resource):
     def get(self):
-        return "Get ES Agent log!"
+        logList = os.listdir(logDir)
+        response = jsonify({'Logs': logList})
+        response.status_code = 200
+        return response
+
+
+@agent.route('/v1/logs/<log>')
+class NodeLog(Resource):
+    def get(self, log):
+        delasticlog = os.path.join(logDir, log)
+
+        if not os.path.isfile(delasticlog):
+            response = jsonify({'Status': 'Env Error',
+                                'Message': 'Log file not found'})
+            response.status_code = 404
+            app.logger.warning('[%s] : [WARN] No log found at: %s',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(delasticlog))
+            return response
+        try:
+            logFile = open(os.path.join(logDir, log), 'r')
+        except IOError:
+            response = jsonify({'Error': 'File I/O!'})
+            response.status_code = 500
+            app.logger.error('[%s] : [ERROR] Error reading log file',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            return response
+        return send_file(logFile, mimetype='text/plain', as_attachment=True)
 
 
 @agent.route('/v1/host')
 class NodeInfo(Resource):
     def get(self):
-        return "Host Info!"
+        mType = platform.uname()
+        response = jsonify({'System': mType[0],
+                            'Node': mType[1],
+                            'Release': mType[2],
+                            'Version': mType[3],
+                            'Machine': mType[4],
+                            'Processor': mType[5]})
+        response.status_code = 200
+        return response
 
 
 @agent.route('/v1/cert')
@@ -68,7 +136,36 @@ class ESCertificates(Resource):
 @agent.route('/v1/elasticsearch')
 class ESController(Resource):
     def get(self):
-        return "Current Status of ES Core!"
+        if not os.path.isfile(os.path.join(pidDir, 'elasticsearch.pid')):
+            response = jsonify({'Status': 'Env Error',
+                                'Message': 'PID file not found!'})
+            response.status_code = 404
+            app.logger.warning('[%s]: [WARN] No Elasticsearch pid file found',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            return response
+
+        status = esController.checkPID
+
+        if not status:
+            response = jsonify({'Status': 'Stopped',
+                                'Message': 'No ES instance found'})
+            response.status_code = 200
+            app.logger.info('[%s]: [INFO] No running Elastcisearch instance found',
+                            datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            return response
+        else:
+            response = jsonify({'Status': 'Running',
+                                'Message': 'PID ' + status})
+            response.status_code = 200
+            app.logger.info('[%s]: [INFO] Elasticsearch instance runnning with PID %s',
+                            datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(status))
+        return response
+
+
+@agent.route('/v1/elasticsearch/state')
+class ESControllerState(Resource):
+    def get(self):
+        return "Last succesfull JSON config!"
 
 
 @agent.route('/v1/elasticsearch/config')
@@ -76,6 +173,7 @@ class ESControllerConfig(Resource):
     def get(self):
         return "Get current configuration"
 
+    @api.expect(esConfModel)
     def post(self):
         return "Generate new configuration"
 
@@ -95,17 +193,11 @@ class ESControllerCmd(Resource):
         return "Execute specific command!"
 
 
-@agent.route('/v1/elasticsearch/logs')
-class ESControllerLogs(Resource):
-    def get(self):
-        return "Get current list of logs"
-
-
-@agent.route('/v1/elasticsearch/logs/<log>')
-class ESControllerLog(Resource):
-    def get(self):
-        return "Get specific log!"
-
-
 if __name__ == '__main__':
-    app.run(debug=True)
+    handler = RotatingFileHandler(logDir + '/dmon-elasticsearch.log', maxBytes=10000000, backupCount=5)
+    handler.setLevel(logging.INFO)
+    app.logger.addHandler(handler)
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.DEBUG)
+    log.addHandler(handler)
+    app.run(host='0.0.0.0', port=5000, debug=True)

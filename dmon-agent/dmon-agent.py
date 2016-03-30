@@ -36,6 +36,7 @@ from app import *
 logDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'log')
 tmpDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'templates')
 pidDir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'pid')
+agentlog = os.path.join(logDir, 'dmon-agent.log')
 collectdlog = '/var/log/collectd.log'
 collectdpid = os.path.join(pidDir, 'collectd.pid')
 lsflog = '/var/log/logstash-fowarder/logstash-fowarder.log'
@@ -44,6 +45,7 @@ collectdConf = '/etc/collectd/collectd.conf'
 lsfConf = '/etc/logstash-forwarder.conf'
 lsfList = os.path.join(tmpDir, 'logstashforwarder.list')
 lsfGPG = os.path.join(tmpDir, 'GPG-KEY-elasticsearch')
+certLoc = '/opt/certs/logstash-forwarder.crt'
 
 # supported aux components
 # auxList = ['collectd', 'lsf', 'jmx']
@@ -143,6 +145,13 @@ class NodeDeployLSF(Resource):
                          'LSLumberPort': request.json['LumberjackPort']}
         app.logger.info('[%s] : [INFO] Logstash-Forwarder settings:  %s',
                         datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(settingsDict))
+        if not os.path.isfile(certLoc):
+            app.logger.warning('[%s] : [WARN] Logstash Server certificate not detected',
+                        datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+            response = jsonify({'Status': 'Env Error',
+                                'Message': 'LS Server certificate is missing'})
+            response.status_code = 404
+            return response
         aux.configureComponent(settingsDict, lsfTemp)
         aux.controll('logstash-forwarder', 'restart')
         response = jsonify({'Status': 'Done',
@@ -153,7 +162,7 @@ class NodeDeployLSF(Resource):
 
 @agent.route('/v1/jmx')
 class NodeDeployJMX(Resource):
-    def post(self): # TODO:  implement or remove.
+    def post(self):  # TODO:  implement or remove.
         return "JMX redeploy"
 
 
@@ -220,6 +229,7 @@ class NodeMonitStopAll(Resource):
 
 
 @agent.route('/v1/start/<auxComp>')
+@api.doc(params={'auxComp': 'Can be collectd or lsf'})
 class NodeMonitStartSelective(Resource):
     def post(self, auxComp):
         if not aux.check(auxComp):
@@ -248,6 +258,7 @@ class NodeMonitStartSelective(Resource):
 
 
 @agent.route('/v1/stop/<auxComp>')
+@api.doc(params={'auxComp': 'Can be collectd or lsf'})
 class NodeMonitStopSelective(Resource):
     def post(self, auxComp):
         if not aux.check(auxComp):
@@ -261,8 +272,6 @@ class NodeMonitStopSelective(Resource):
         try:
             aux.controll(auxComp, 'stop')
         except Exception as inst:
-            # print >> sys.stderr, type(inst)
-            # print >> sys.stderr, inst.args
             app.logger.error('[%s] : [ERROR] Error starting %s with : %s and %s',
                              datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(auxComp), type(inst), inst.args)
             response = jsonify({'Status': type(inst),
@@ -275,7 +284,23 @@ class NodeMonitStopSelective(Resource):
         return response
 
 
-@agent.route('/v1/logs/<auxComp>')
+@agent.route('/v1/log')
+class NodeLog(Resource):
+    def get(self):
+        try:
+            log = open(agentlog,'w+')
+        except Exception as inst:
+            app.logger.error('[%s] : [ERROR] Opening log with %s and %s',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+            response = jsonify({'Status': 'File Error',
+                                    'Message': 'Cannot open log file'})
+            response.status_code = 500
+            return response
+        return send_file(log, mimetype='text/plain', as_attachment=True)
+
+
+@agent.route('/v1/log/component/<auxComp>')
+@api.doc(params={'auxComp': 'Can be collectd or lsf'})
 class NodeMonitLogs(Resource):
     def get(self, auxComp):
         if not aux.check(auxComp):
@@ -289,15 +314,28 @@ class NodeMonitLogs(Resource):
             try:
                 clog = open(collectdlog, 'w+')
             except Exception as inst:
-                # print >> sys.stderr, type(inst)
-                # print >> sys.stderr, inst.args
-                app.logger.error('[%s] : [ERROR] Opening collectd log',
-                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+                app.logger.error('[%s] : [ERROR] Opening collectd log with %s and %s',
+                               datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+                response = jsonify({'Status': 'File Error',
+                                    'Message': 'Cannot open log file'})
+                response.status_code = 500
+                return response
+        if auxComp == 'lsf':
+            try:
+                clog = open(lsflog, 'w+')
+            except Exception as inst:
+                app.logger.error('[%s] : [ERROR] Opening lsf log with %s and %s',
+                                 datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+                response = jsonify({'Status': 'File Error',
+                                    'Message': 'Cannot open log file'})
+                response.status_code = 500
+                return response
 
-            return send_file(clog, mimetype='text/plain', as_attachment=True)
+        return send_file(clog, mimetype='text/plain', as_attachment=True)
 
 
 @agent.route('/v1/conf/<auxComp>')
+@api.doc(params={'auxComp': 'Can be collectd or lsf'})
 class NodeMonitConf(Resource):
     def get(self, auxComp):
         if not aux.check(auxComp):
@@ -341,6 +379,7 @@ class NodeCheck(Resource):  # TODO: implement check functionality
 
 
 @agent.route('/v1/bdp/<platform>')  #TODO: Needs testing
+@api.doc(params={'platform': 'Can be yarn or spark'})
 class AgentMetricsSystem(Resource):
     @api.expect(sparkProperties)
     def post(self, platform):
@@ -410,7 +449,7 @@ class AgentMetricsSystem(Resource):
 
 
 if __name__ == '__main__':
-    handler = RotatingFileHandler(logDir +'/dmon-agent.log', maxBytes=10000000, backupCount=5)
+    handler = RotatingFileHandler(logDir + '/dmon-agent.log', maxBytes=10000000, backupCount=5)
     handler.setLevel(logging.INFO)
     app.logger.addHandler(handler)
     log = logging.getLogger('werkzeug')

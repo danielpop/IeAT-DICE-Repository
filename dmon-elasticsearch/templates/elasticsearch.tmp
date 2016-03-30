@@ -71,12 +71,6 @@ node.name: {{nodeName}}
 #node.master: false
 #node.data: false
 
-
-#DICE Config Role  TODO
-#node.master: {{MasterNode}}
-#node.data: {{DataNode}}
-
-
 # Use the Cluster Health API [http://localhost:9200/_cluster/health], the
 # Node Info API [http://localhost:9200/_nodes] or GUI tools
 # such as <http://www.elasticsearch.org/overview/marvel/>,
@@ -115,17 +109,13 @@ node.name: {{nodeName}}
 #DICE Config Shards
 
 index.number_of_shards: 1
-#index.number_of_shards: {{NumberOfShards}}
 
 # Set the number of replicas (additional copies) of an index (1 by default):
 #
 #index.number_of_replicas: 1
 
-
-
 #DICE Config Replicas
 index.number_of_replicas: 0
-#index.number_of_replicas: {{NumberOfReplicas}}
 
 # Note, that for development on a local machine, with small indices, it usually
 # makes sense to "disable" the distributed features:
@@ -154,7 +144,7 @@ index.number_of_replicas: 0
 # Use the Index Status API (<http://localhost:9200/A/_status>) to inspect
 # the index status.
 
-#TODO
+
 #################################### Paths ####################################
 
 # Path to directory containing configuration (this file and logging.yml):
@@ -190,7 +180,7 @@ path.logs: {{esLogDir}}
 #
 #plugin.mandatory: mapper-attachments,lang-groovy
 
-#TODO
+
 ################################### Memory ####################################
 
 # Elasticsearch performs poorly when JVM starts swapping: you should ensure that
@@ -227,7 +217,7 @@ bootstrap.mlockall: true
 # Set both 'bind_host' and 'publish_host':
 #
 #TODO: DICE uncomment for public access
-network.host: 0.0.0.0
+#network.host: 0.0.0.0
 
 # Set a custom port for the node to node communication (9300 by default):
 #
@@ -283,7 +273,7 @@ network.host: 0.0.0.0
 #
 #gateway.expected_nodes: 2
 
-#TODO
+
 ############################# Recovery Throttling #############################
 
 # These settings allow to control the process of shards allocation between
@@ -333,31 +323,16 @@ network.host: 0.0.0.0
 #indices.memory.min_shard_index_buffer_size: 12mb
 #indices.memory.min_index_buffer_size: 96mb
 
-#DICE Config #TODO Test
-#indices.memory.index_buffer_size: {{IndexBufferSize}}
-#indices.memory.min_shard_index_buffer_size: {{MinShardIndexBufferSize}}
-#indices.memory.min_index_buffer_size: {{MinIndexBufferSize}}
-
-
 # Cache Sizes
 #indices.fielddata.cache.size: 20%
 #indices.fielddata.cache.expire: 6h
 #indices.cache.filter.size: 20%
 #indices.cache.filter.expire: 6h
 
-#DICE Config #TODO Test
-#indices.fielddata.cache.size: {{FieldDataCacheSize}}
-#indices.fielddata.cache.expire: {{FieldDataCacheExpires}}
-#indices.cache.filter.size: {{FieldDataCacheFilterSize}}
-#indices.cache.filter.expire: {{FieldDataCacheFilterExpires}}
-
-
 #Dynamic Scripting
 script.engine.groovy.inline.aggs: on
 script.inline: on
 script.indexed: on
-
-#TODO
 ################################## Discovery ##################################
 
 # Discovery infrastructure ensures nodes can be found within a cluster
@@ -425,33 +400,22 @@ script.indexed: on
 #index.search.slowlog.threshold.fetch.warn: 1s
 #index.search.slowlog.threshold.fetch.info: 800ms
 #index.search.slowlog.threshold.fetch.debug: 500ms
-#index.search.slowlog.threshold.fetch.trace: 200ms
+index.search.slowlog.threshold.fetch.trace: 200ms
 
 #index.indexing.slowlog.threshold.index.warn: 10s
 #index.indexing.slowlog.threshold.index.info: 5s
 #index.indexing.slowlog.threshold.index.debug: 2s
-#index.indexing.slowlog.threshold.index.trace: 500ms
+index.indexing.slowlog.threshold.index.trace: 500ms
 
 ################################## GC Logging ################################
 
 #monitor.jvm.gc.young.warn: 1000ms
 #monitor.jvm.gc.young.info: 700ms
-#monitor.jvm.gc.young.debug: 400ms
+monitor.jvm.gc.young.debug: 400ms
 
 #monitor.jvm.gc.old.warn: 10s
 #monitor.jvm.gc.old.info: 5s
-#monitor.jvm.gc.old.debug: 2s
-
-#DICE Config #TODO Test
-{% if ESCoreDebug == 0%}
-    #Debug Disabled
-{% else %}
-#index.search.slowlog.threshold.query.trace: 500ms
-index.search.slowlog.threshold.fetch.trace: 200ms
-index.indexing.slowlog.threshold.index.trace: 500ms
-monitor.jvm.gc.young.debug: 400ms
 monitor.jvm.gc.old.debug: 2s
-{% endif %}
 
 ################################## Security ################################
 

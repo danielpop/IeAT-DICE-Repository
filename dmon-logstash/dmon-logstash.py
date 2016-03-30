@@ -123,7 +123,34 @@ class LSCertificates(Resource):
         return response
 
     def post(self):
+        try:
+            lsagent.generateCertificate('logstash', 'logstash')  #TODO: allow for renaming of old certificates ans save the new ones with default "logstash"
+        except Exception as inst:
+            app.logger.error('[%s] : [ERROR] Can not Generate Certificate, error %s with %s',
+                                datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), type(inst), inst.args)
+
         return "Send new certificate!" #TODO: sending new certificates
+
+
+@agent.route('/v1/cert/type/<ctype>/name/<cname>')
+class LSCertificateGet(Resource):
+    def get(self, ctype, cname):
+        ctypeList = ['crt', 'key']
+        certN = cname + '.' + ctype
+        if not os.path.isfile(os.path.join(credDir, certN)):
+            app.logger.error('[%s] : [ERROR] File not found, %s',
+                             datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), cname)
+            return "not found files"
+        if ctype not in ctypeList:
+            app.logger.error('[%s] : [ERROR] Unsupported file type used for credential, %s',
+                             datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), ctype)
+            response = jsonify({'Status': 'Value Error',
+                                'Supported': ctypeList})
+            response.status_code = 400
+            return response
+
+        certFile = open(os.path.join(credDir, cname + '.' + ctype), 'r')
+        return send_file(certFile, mimetype='application/x-x509-ca-cert', as_attachment=True)
 
 
 @agent.route('/v1/logstash')
@@ -150,7 +177,7 @@ class LSStatus(Resource):
             response = jsonify({'Status': 'Running',
                                 'Message': 'PID ' + status})
             response.status_code = 200
-            app.logger.warning('[%s]: [INFO] Logstash instance running with PID %s',
+            app.logger.info('[%s]: [INFO] Logstash instance running with PID %s',
                                datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(status))
             return response
 
@@ -334,7 +361,7 @@ class LSControllerLog(Resource):
 
 
 if __name__ == '__main__':
-    handler = RotatingFileHandler(logDir +'/dmon-logstash.log', maxBytes=10000000, backupCount=5)
+    handler = RotatingFileHandler(logDir + '/dmon-logstash.log', maxBytes=10000000, backupCount=5)
     handler.setLevel(logging.INFO)
     app.logger.addHandler(handler)
     log = logging.getLogger('werkzeug')
