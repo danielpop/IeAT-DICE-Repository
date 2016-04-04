@@ -18,7 +18,7 @@ limitations under the License.
 """
 
 from flask import send_file
-from flask import request
+from flask import request, abort
 from flask.ext.restplus import Resource, fields
 import os
 import jinja2
@@ -26,6 +26,8 @@ import sys
 import subprocess
 import platform
 import logging
+import shutil
+
 from logging.handlers import RotatingFileHandler
 
 from pyUtil import *
@@ -45,7 +47,8 @@ collectdConf = '/etc/collectd/collectd.conf'
 lsfConf = '/etc/logstash-forwarder.conf'
 lsfList = os.path.join(tmpDir, 'logstashforwarder.list')
 lsfGPG = os.path.join(tmpDir, 'GPG-KEY-elasticsearch')
-certLoc = '/opt/certs/logstash-forwarder.crt'
+certDir = '/opt/certs/'
+certLoc = os.path.join(certDir, 'logstash-forwarder.crt')
 
 # supported aux components
 # auxList = ['collectd', 'lsf', 'jmx']
@@ -447,8 +450,60 @@ class AgentMetricsSystem(Resource):
             response.status_code = 404
             return response
 
+# logstash-fowarder keys
+@agent.route('/v1/lsf/key')
+class LSFKeyGet(Resource):
+    def get(self):
+        keyName = []
+        for filename in os.listdir(certDir):
+            if not os.path.isdir(filename):
+                keyName.append(filename)
+                
+        response = jsonify({'Keys': keyName})
+        response.status_code = 200
+        return response
 
-if __name__ == '__main__':
+    def put(self):
+        if request.headers['Content-Type'] == 'application/x-pem-file':
+            pemData = request.data
+        else:
+            app.logger.error('[%s] : [ERR] Bad content type. Expected application/x-pem-file, received %s.',
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), request.headers['Content-Type'])
+            abort(400)
+            
+        keyFile = certLoc
+        
+        if os.path.exists(keyFile):
+            try:
+                shutil.copyfile(keyFile, keyFile+'.bak')
+            except IOError as exception:
+                app.logger.error('[%s] : [ERR] File I/O Exception: Unable to backup file: %s. Details: %s',
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile, exception)
+                
+                response = jsonify({'File I/O Exception: Unable to backup file ' + keyFile + ' \nDetails: ' + exception})
+                response.status_code = 500
+                return response    
+
+        try:
+            key = open(keyFile, 'w+')
+            key.write(pemData)
+            key.close()
+        except IOError:
+            app.logger.error('[%s] : [ERR] File I/O Exception: Unable to open file %s in w+ mode. Details: %s',
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile, exception)
+
+            response = jsonify({'File I/O Exception: Unable to open file ' + keyFile + ' in w+ mode.' + ' \nDetails: ' + exception})
+            response.status_code = 500
+            return response    
+
+        app.logger.info('[%s] : [INFO] Logstash forwarder key at %s has been successfully updated.',
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile)
+
+        response = jsonify({'Status': 'Logstash forwarder key at ' + keyFile + ' has been successfully updated.'})
+        response.status_code = 201
+        return response
+
+if __name__ == '__main__':  
     handler = RotatingFileHandler(logDir + '/dmon-agent.log', maxBytes=10000000, backupCount=5)
     handler.setLevel(logging.INFO)
     app.logger.addHandler(handler)
