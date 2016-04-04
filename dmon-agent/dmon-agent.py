@@ -450,16 +450,16 @@ class AgentMetricsSystem(Resource):
             response.status_code = 404
             return response
 
-# logstash-fowarder keys
-@agent.route('/v1/lsf/key')
-class LSFKeyGet(Resource):
+# logstash-fowarder certificates
+@agent.route('/v1/lsf/cert')
+class LSFCertificate(Resource):
     def get(self):
-        keyName = []
+        certificateName = []
         for filename in os.listdir(certDir):
             if not os.path.isdir(filename):
-                keyName.append(filename)
+                certificateName.append(filename)
                 
-        response = jsonify({'Keys': keyName})
+        response = jsonify({'Certificates': certificateName})
         response.status_code = 200
         return response
 
@@ -471,35 +471,35 @@ class LSFKeyGet(Resource):
                                     datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), request.headers['Content-Type'])
             abort(400)
             
-        keyFile = certLoc
+        certificateFile = certLoc
         
-        if os.path.exists(keyFile):
+        if os.path.exists(certificateFile):
             try:
-                shutil.copyfile(keyFile, keyFile+'.bak')
+                shutil.copyfile(certificateFile, certificateFile+'.bak')
             except IOError as exception:
                 app.logger.error('[%s] : [ERR] File I/O Exception: Unable to backup file: %s. Details: %s',
-                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile, exception)
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), certificateFile, exception)
                 
-                response = jsonify({'File I/O Exception: Unable to backup file ' + keyFile + ' \nDetails: ' + exception})
+                response = jsonify({'File I/O Exception: Unable to backup file ' + certificateFile + ' \nDetails: ' + exception})
                 response.status_code = 500
                 return response    
 
         try:
-            key = open(keyFile, 'w+')
-            key.write(pemData)
-            key.close()
+            cert = open(certificateFile, 'w+')
+            cert.write(pemData)
+            cert.close()
         except IOError:
             app.logger.error('[%s] : [ERR] File I/O Exception: Unable to open file %s in w+ mode. Details: %s',
-                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile, exception)
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), certificateFile, exception)
 
-            response = jsonify({'File I/O Exception: Unable to open file ' + keyFile + ' in w+ mode.' + ' \nDetails: ' + exception})
+            response = jsonify({'File I/O Exception: Unable to open file ' + certificateFile + ' in w+ mode.' + ' \nDetails: ' + exception})
             response.status_code = 500
             return response    
 
-        app.logger.info('[%s] : [INFO] Logstash forwarder key at %s has been successfully updated.',
-                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), keyFile)
+        app.logger.info('[%s] : [INFO] Logstash forwarder certificate at %s has been successfully updated.',
+                                    datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), certificateFile)
 
-        response = jsonify({'Status': 'Logstash forwarder key at ' + keyFile + ' has been successfully updated.'})
+        response = jsonify({'Status': 'Logstash forwarder certificate at ' + certificateFile + ' has been successfully updated.'})
         response.status_code = 201
         return response
 
