@@ -22,6 +22,9 @@ import os
 import nmap
 import sys, getopt
 from flask import Flask, jsonify, Response
+from app import *
+import time
+from datetime import datetime
 
 
 #fix for UNicodeDecoder Error -> ascii codec
@@ -114,7 +117,7 @@ def installCollectd(hostlist, userName, uPassword, confDir=confDir):
 	print "Starting Collectd ..."
 	try:
 		#out = client.exec_command('collectd',sudo=True,pty=False)
-		out = client.run_command('nohup service collectd restart',sudo=True)
+		out = client.run_command('nohup service collectd restart', sudo=True)
 		listOutput(out)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured starting collectd!"
@@ -275,7 +278,7 @@ def installLogstashForwarder(hostlist,userName,uPassword,confDir):
 # 	print "Stff"
 
 
-def uploadFile(hostlist,userName,password,fileLoc,fileName, upLoc):
+def uploadFile(hostlist, userName, password, fileLoc, fileName, upLoc):
 	'''
 		Uploads a specified file to target servers via ssh.
 
@@ -287,20 +290,21 @@ def uploadFile(hostlist,userName,password,fileLoc,fileName, upLoc):
 		upLoc    -> absolute path where the file needs to be saved in the target host
 
 	'''
-	client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
-	cmdMove = 'mv '+fileName+' '+upLoc
+	client = ParallelSSHClient(hostlist, user=userName, password=password)
+	cmdMove = 'mv ' + fileName + ' ' + upLoc
 	try:	
-		client.copy_file(fileLoc,fileName)
+		client.copy_file(fileLoc, fileName)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while uploading file!"
 	try:	
-		client.run_command(cmdMove,sudo=True)
-		client.run_command('echo >> '+upLoc,sudo=True) #TODO replace ugly fix
+		client.run_command(cmdMove, sudo=True)
+		client.run_command('echo >> ' + upLoc, sudo=True) #TODO replace ugly fix
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured while moving file"
 		raise
 
-def serviceCtrl(hostlist,userName,uPassword,serviceName, command):
+
+def serviceCtrl(hostlist, userName, uPassword, serviceName, command):
 	'''
 		Checks the status of aservice on remote servers.
 		Only supported commands are start, stop, status
@@ -311,7 +315,7 @@ def serviceCtrl(hostlist,userName,uPassword,serviceName, command):
 	'''
 	
 	if command not in ['status', 'stop', 'start', 'force-start']:
-		print "Command "+ command +" unsupported!"
+		print "Command " + command + " unsupported!"
 		exit()
 	try:
 		client = ParallelSSHClient(hostlist, user=userName, password=uPassword)
@@ -349,7 +353,7 @@ def hostsScan(hostlist):
 	badHosts = []
 	
 	for host in hostlist:
-		response = os.system( "ping -c 1 " + host)
+		response = os.system("ping -c 1 " + host)
 		if response == 0:
 			print host, 'is up!'
 		else:
@@ -423,21 +427,20 @@ def nmapScan(hostlist, port='22-443'):
 
 def detectOS(hostlist, userName, uPassword):
 	hostOS = {}
-	client = ParallelSSHClient(hostlist, user=userName,password=uPassword)
+	client = ParallelSSHClient(hostlist, user=userName, password=uPassword)
 	cmdStr = "uname -a"
 	try:
 		output = client.run_command(cmdStr)
 		for host in output:
 			for line in output[host]['stdout']:
 				if 'Ubuntu' in line or 'ubuntu' in line:
-					hostOS.update({host:'Ubuntu'})
+					hostOS.update({host: 'Ubuntu'})
 				else:
-					hostOS.update({host:'Unknown'})
+					hostOS.update({host: 'Unknown'})
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "An exception has occured!"
 		raise
 	return hostOS
-
 
 
 def checkSetup():
@@ -470,10 +473,10 @@ def auxCtrl(auxComp,command):
     command -> Command to be executed on the auxiliary components.
     		   Can be start or stop
 	'''
-	auxList = ['collectd','lsf']
+	auxList = ['collectd', 'lsf']
 	cState = ''
 	if auxComp not in auxList:
-		response = jsonify({'Status':'No such such aux component '+ auxComp})
+		response = jsonify({'Status': 'No such such aux component ' + auxComp})
 		response.status_code = 400
 		return response
 
@@ -547,47 +550,84 @@ def deployAgent(hostlist, userName, uPassword):
 	:param uPassword: password
 	'''
 
+	app.logger.info('[%s] : [INFO] dmon-agent hostlist received %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
 	if not os.path.isdir(credDir):
-		print "Configuration dir not found!"
+		# print "Configuration dir not found!"
+		app.logger.warning('[%s] : [WARN] Conf dir not found',
+						   datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 
-	print "Copying Certificate ...."
 	client = ParallelSSHClient(hostlist, user=userName, password=uPassword)
 	localCopyCrt = os.path.join(credDir, 'logstash-forwarder.crt')
 
 	try:
-		print "Creating certificate folders..."
-		client.run_command('mkdir /opt/test/certs', sudo=True)
+		mkdirOut = client.run_command('mkdir -p /opt/certs', sudo=True) #TODO: handle duplicate certs
+		for host in mkdirOut:
+			for line in mkdirOut[host]['stdout']:
+				app.logger.info('[%s] : [INFO] Host %s -> %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), host, line)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "An exception has occured creating /opt/test/certs!"
+		# print "An exception has occured creating /opt/certs!"
+		app.logger.error('[%s] : [ERROR] Error ocurred while creating /opt/certs',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 		raise
-
-	print "Copying certificate..."
-
-	# try:
-	# 	client.copy_file(localCopyCrt, "logstash-forwarder.crt")
-	# except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-	# 	print "An exception has occured while moving cert!"
-	# 	raise
+	app.logger.info('[%s] : [INFO] Created cert directories for %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
 
 	try:
-		print "Copying dmon-agent ..."
-		client.run_command('wget https://github.com/igabriel85/IeAT-DICE-Repository/releases/download/0.0.3/dmon-agent.tar.gz')
+		client.copy_file(localCopyCrt, "logstash-forwarder.crt")
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "Error while downloading dmon-agent"
+		# print "An exception has occured while uploading cert!"
+		app.logger.error('[%s] : [ERROR] Failed to copying certificates',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 		raise
-
+	app.logger.info('[%s] : [INFO] Copied certificate to %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
 	try:
-		client.run_command('mv dmon-agent.tar.gz /opt')
-		client.run_command('tar xvf /opt/dmon-agent.tar.gz')
+		client.run_command('mv logstash-forwarder.crt /opt/certs/', sudo=True)
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		# print 'An exception occured while copying cert!'
+		app.logger.error('[%s] : [ERROR] Failed to move certificates',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+		raise
+	app.logger.info('[%s] : [INFO] Moved certificates to proper location %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+
+	agentUrl = 'wget %s' %(os.getenv('DMON_AGENT', 'https://github.com/igabriel85/IeAT-DICE-Repository/releases/download/v0.0.4-dmon-agent/dmon-agent.tar.gz'))
+	app.logger.info('[%s] : [INFO] dmon-agent url %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), agentUrl)
+	try:
+		client.run_command(agentUrl)
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		# print "Error while downloading dmon-agent"
+		app.logger.error('[%s] : [ERROR] Failed to copy dmon-agent',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+		raise
+	app.logger.info('[%s] : [INFO] Copied dmon-agent to %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+
+	time.sleep(5)
+	try:
+		mvArchive = client.run_command('mv dmon-agent.tar.gz /opt/', sudo=True)
+		for host in mvArchive:
+			for line in mvArchive[host]['stdout']:
+				app.logger.info('[%s] : [INFO] Host %s -> %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), host, line)
+		unpackArchive = client.run_command('tar xvf /opt/dmon-agent.tar.gz -C /opt', sudo=True)
+		for host in unpackArchive:
+			for line in unpackArchive[host]['stdout']:
+				app.logger.info('[%s] : [INFO] Host %s -> %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), host, line) #TODO: add sleep to retry unpacking
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
 		print "Error while unpacking dmon-agent"
+		app.logger.error('[%s] : [ERROR] Failed while unpacking dmon-agent',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 		raise
+	app.logger.info('[%s] : [INFO] dmon-agent unpacked %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+	# try:
+	# 	client.run_command('pip install -r /opt/dmon-agent/requirements.txt', sudo=True)
+	# except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+	# 	print "Error while installing dmon-agent dependencies"
+	# 	raise
 
-	try:
-		client.run_command('pip install -r /opt/dmon-agent/requirements.txt')
-	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "Error while installing dmon-agent dependencies"
-		raise
 
 def startAgent(hostlist, username, password):
 	'''
@@ -595,13 +635,62 @@ def startAgent(hostlist, username, password):
 	:param username:
 	:param password:
 	'''
-	print "Start Agents"
-	client = ParallelSSHClient(hostlist, user=userName, password=uPassword)
+	# print "Start Agents"
+	app.logger.info('[%s] : [INFO] dmon-agent hostlist received %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+	client = ParallelSSHClient(hostlist, user=username, password=password)
 	try:
-		print "Start Agent..."
-		client.run_command('./opt/dmon-agent/agent-start.sh', sudo=True)
+		agentStart = client.run_command('(cd /opt/dmon-agent && nohup bash /opt/dmon-agent/dmon-agent.sh)', sudo=True)
+		for host in agentStart:
+			for line in agentStart[host]['stdout']:
+				app.logger.info('[%s] : [INFO] Host %s -> %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), host, line)
 	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
-		print "An exception has occurred while starting dmon-agent!"
+		# print "An exception has occurred while starting dmon-agent!"
+		app.logger.error('[%s] : [ERROR] Failed to start dmon-agent',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+		raise
+	app.logger.info('[%s] : [INFO] dmon-agent started for %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+
+
+def stopAgent(hostlist, username, password):
+	'''
+	:param hostlist:
+	:param username:
+	:param password:
+	:return:
+	'''
+	# print "Stopping Agents"
+	app.logger.info('[%s] : [INFO] dmon-agent hostlist received %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+	client = ParallelSSHClient(hostlist, user=username, password=password)
+	try:
+		client.run_command('(cd /opt/dmon-agent && nohup bash /opt/dmon-agent/dmon-agent.sh stop)', sudo=True)
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		print "An exception has occurred while stopping dmon-agent!"
+		app.logger.error('[%s] : [ERROR] Failed to stop dmon-agent',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
+		raise
+	app.logger.info('[%s] : [INFO] dmon-agent stopped for %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+
+
+def purgeAgent(hostlist, username, password):
+	'''
+	:param hostlist:
+	:param username:
+	:param password:
+	:return:
+	'''
+	app.logger.info('[%s] : [INFO] dmon-agent hostlist received %s',
+					datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'), str(hostlist))
+	client = ParallelSSHClient(hostlist, user=username, password=password)
+	try:
+		client.run_command('(cd /opt && rm -rf dmon-agent*)', sudo=True)
+	except (AuthenticationException, UnknownHostException, ConnectionErrorException):
+		print "An exception has occurred while deleting dmon-agent!"
+		app.logger.error('[%s] : [ERROR] Failed to delete dmon-agent',
+						 datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'))
 		raise
 
 
@@ -616,7 +705,8 @@ def main(argv):
 	uPassword = ''
 	uKey = ' ' #location of secret key
 	try:
-		opts, args=getopt.getopt(argv,"hi:u:p:k:tdc",["hostFile","username","password","key","test","deploy","check"])
+		opts, args = getopt.getopt(argv, "hi:u:p:k:tdc", ["hostFile", "username",
+														  "password", "key", "test", "deploy", "check"])
 	except getopt.GetoptError:
 		print "%-------------------------------------------------------------------------------------------%"
 		print "Invalid argument! Arguments must take the form:"
@@ -634,16 +724,16 @@ def main(argv):
 			print "Usage Example:"
 			print "pysshCore -i <hostfile> -u <username> -p <password> -k <key>"
 			print"                                                                                              "
- 			print "NOTE: Secret key not yet suported only user and password auth!"
+			print "NOTE: Secret key not yet suported only user and password auth!"
 			print "%-------------------------------------------------------------------------------------------%"
 			sys.exit()
-		elif opt in ("-i","--hostFile"):
+		elif opt in ("-i", "--hostFile"):
 			#hostfile=arg
 			if os.path.isfile(arg) is not True:
 				print "ERROR: No such file", arg
 				sys.exit(2)
 			try:
-				with open(arg,'r') as f:
+				with open(arg, 'r') as f:
 					hostlist = [line.strip() for line in f] #strip new line char from end of file
 					#print "These are the submitted hosts:"
 					#print hostlist
@@ -651,14 +741,14 @@ def main(argv):
 					#print "&--------------------&"
 			except:
 				print "Caught Exception while opening file", arg
-		elif opt in ("-u","--username"):
+		elif opt in ("-u", "--username"):
 			userName=arg
 			#print userName
-		elif opt in ("-p","--password"):
+		elif opt in ("-p", "--password"):
 			uPassword = arg
 			#print uPassword
-		elif opt in ("-t","--test"):
-			if len(userName)==0 or len(uPassword)==0:
+		elif opt in ("-t", "--test"):
+			if len(userName) == 0 or len(uPassword)==0:
 				print "Must specify valid User Name and Password!"
 			else:
 				#Scan listed hosts
@@ -675,16 +765,16 @@ def main(argv):
 				#passing only active nodes to nmap
 				nmapScan(good)
 				print "%-------------------------------------------------------------------------------------------%"
-		elif opt in ("-d","--deploy"):
-			if len(userName)==0 or len(uPassword)==0:
+		elif opt in ("-d", "--deploy"):
+			if len(userName) == 0 or len(uPassword) == 0:
 				print "Must specify valid User Name and Password!"
 			else:
 				print "%-------------------------------------------------------------------------------------------%"
 				print "Starting Collectd deployment on hosts."
-				installCollectd(hostlist,userName,uPassword,confDir)
+				installCollectd(hostlist, userName, uPassword, confDir)
 				print ""
 				print "Starting Logstash-Forwarder deployment on hosts."
-				installLogstashForwarder(hostlist,userName,uPassword,confDir)
+				installLogstashForwarder(hostlist, userName, uPassword, confDir)
 				print ""
 				print "Deployment DONE!"
 				print "%-------------------------------------------------------------------------------------------%"
@@ -693,15 +783,15 @@ def main(argv):
 
 if __name__=='__main__':
 	if len(sys.argv) == 1:
-		hostlist = ['109.231.126.190','109.231.126.222','109.231.126.221','109.231.126.102','109.231.126.166','109.231.126.70','109.231.126.136',
-		'109.231.126.146','109.231.126.157']
-		hostlist = ['109.231.126.189','109.231.126.177']
+		hostlist = ['109.231.126.190', '109.231.126.222', ' 109.231.126.221', '109.231.126.102', '109.231.126.166',
+					'109.231.126.70', '109.231.126.136', '109.231.126.146', '109.231.126.157']
+		hostlist = ['109.231.126.189', '109.231.126.177']
 		
 		userName = 'ubuntu'
 		uPassword = 'rexmundi220'
 		#installCollectd(hostlist,userName,uPassword)
 		#mf(hostlist,userName,uPassword)
-		installLogstashForwarder(hostlist,userName,uPassword,confDir)
+		installLogstashForwarder(hostlist, userName, uPassword, confDir)
 		#serviceCtrl(hostlist,userName,uPassword,'collectd','start')
 		#print detectOS(hostlist, 'ubuntu','rexmundi220')
 		#nmapScan(hostlist)

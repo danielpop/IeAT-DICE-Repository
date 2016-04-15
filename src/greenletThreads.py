@@ -1,7 +1,29 @@
+"""
+
+Copyright 2015, Institute e-Austria, Timisoara, Romania
+    http://www.ieat.ro/
+Developers:
+ * Gabriel Iuhasz, iuhasz.gabriel@info.uvt.ro
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at:
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+"""
+
 import gevent
 import gevent.queue
 import requests
 import json
+from app import *
+from datetime import *
+import time
 
 
 headers = {'content-type': 'application/json'}
@@ -30,7 +52,9 @@ class GreenletRequests():
             gl = gevent.spawn(getRequest, queue)
             gList.append(gl)
 
-        print str(gList)
+        # print str(gList)
+        app.logger.info('[%s] : [INFO] gList %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(gList))
         gevent.joinall(gList)
 
         return GreenletRequests.NodeResponsesGet
@@ -46,25 +70,30 @@ class GreenletRequests():
                 gl = gevent.spawn(postRequest, queue, payload)
                 gList.append(gl)
 
-            print str(gList)
+            # print str(gList)
+            app.logger.info('[%s] : [INFO] gList %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(gList))
             gevent.joinall(gList)
 
             return GreenletRequests.NodeResponsesPost
 
         if type(self.resourceList) is dict:
             for k, v in self.resourceList.iteritems():
-                print k
+                # print k
+                app.logger.info('[%s] : [INFO] Key %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(k))
                 queue.put(k)
 
             for k, v in self.resourceList.iteritems():
                 gl = gevent.spawn(postRequest, queue, v)
                 gList.append(gl)
 
-            print str(gList)
+            # print str(gList)
+            app.logger.info('[%s] : [INFO] gList %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(gList))
             gevent.joinall(gList)
 
             return GreenletRequests.NodeResponsesPost
-
 
     def parallelPut(self, payload):
         queue = gevent.queue.Queue()
@@ -76,7 +105,9 @@ class GreenletRequests():
             gl = gevent.spawn(putRequest, queue, payload)
             gList.append(gl)
 
-        print str(gList)
+        # print str(gList)
+        app.logger.info('[%s] : [INFO] gList %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(gList))
         gevent.joinall(gList)
 
         return GreenletRequests.NodeResponsesPut
@@ -92,7 +123,9 @@ class GreenletRequests():
             gl = gevent.spawn(deleteRequest, queue)
             gList.append(gl)
 
-        print str(gList)
+        # print str(gList)
+        app.logger.info('[%s] : [INFO] gList %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(gList))
         gevent.joinall(gList)
 
         return GreenletRequests.NodeResponsesDelete
@@ -104,12 +137,13 @@ class GreenletRequests():
         GreenletRequests.NodeResponsesDelete = []
 
 
-
 def randomT(queue, name):
     while not queue.empty():
         t = queue.get(timeout=1)
         gevent.sleep(5)
-        print 'I am + ' + name + ' executing ' + str(GreenletRequests.ng)
+        # print 'I am + ' + name + ' executing ' + str(GreenletRequests.ng)
+        app.logger.info('[%s] : [INFO] %s executing %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        name, str(GreenletRequests.ng))
         GreenletRequests.ng += 1
         gevent.sleep(0)
 
@@ -134,7 +168,9 @@ def getRequest(queue):
             response['Data'] = 'n/a'
 
         GreenletRequests.NodeResponsesGet.append(response)
-        print 'Threaded GET with ID ' + str(GreenletRequests.ng) + ' executed for ' + resURI
+        # print 'Threaded GET with ID ' + str(GreenletRequests.ng) + ' executed for ' + resURI
+        app.logger.info('[%s] : [INFO] Thread GET with ID %s executed for %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(GreenletRequests.ng), resURI)
         GreenletRequests.ng += 1
         gevent.sleep(0)
 
@@ -169,10 +205,11 @@ def postRequest(queue, payload=None):
             response['Data'] = 'n/a'
 
         GreenletRequests.NodeResponsesPost.append(response)
-        print 'Threaded POST with ID ' + str(GreenletRequests.np) + ' executed for ' + resourceURI
+        # print 'Threaded POST with ID ' + str(GreenletRequests.np) + ' executed for ' + resourceURI
+        app.logger.info('[%s] : [INFO] Thread POST with ID %s executed for %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(GreenletRequests.ng), resourceURI)
         GreenletRequests.np += 1
         gevent.sleep(0)
-
 
 
 def putRequest(queue, payload=None):
@@ -202,7 +239,9 @@ def putRequest(queue, payload=None):
             response['Data'] = 'n/a'
 
         GreenletRequests.NodeResponsesPost.append(response)
-        print 'Threaded PUT with ID ' + str(GreenletRequests.npo) + ' executed for ' + resourceURI
+        # print 'Threaded PUT with ID ' + str(GreenletRequests.npo) + ' executed for ' + resourceURI
+        app.logger.info('[%s] : [INFO] Thread PUT with ID %s executed for %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(GreenletRequests.ng), resourceURI)
         GreenletRequests.npo += 1
         gevent.sleep(0)
 
@@ -228,7 +267,9 @@ def deleteRequest(queue):
             response['Data'] = 'n/a'
 
         GreenletRequests.NodeResponsesGet.append(response)
-        print 'Threaded DELETE with ID ' + str(GreenletRequests.nd) + ' executed for ' + resURI
+        # print 'Threaded DELETE with ID ' + str(GreenletRequests.nd) + ' executed for ' + resURI
+        app.logger.info('[%s] : [INFO] Thread DELETE with ID %s executed for %s', datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S'),
+                        str(GreenletRequests.ng), resURI)
         GreenletRequests.nd += 1
         gevent.sleep(0)
 
